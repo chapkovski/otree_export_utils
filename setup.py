@@ -25,7 +25,7 @@ setup(
     license='MIT License',
     description='customizing export options in oTree',
     long_description=README,
-    url='https://github.com/chapkovski/custom-waiting-page-for-mturk',
+    url='https://github.com/chapkovski/otree_export_utils',
     author='Philipp Chapkovski',
     author_email='chapkovski@gmail.com',
     classifiers=[
