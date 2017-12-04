@@ -8,7 +8,7 @@ Installation:
 ***************
 1. **Either**:
 
-- type ``pip install otree_export_utils`` in your terminal window.
+- type ``pip install otree-custom-export`` in your terminal window.
 
 
 2. **or**:
