@@ -1,0 +1,22 @@
+{% extends "otree/BaseAdmin.html" %}
+
+{% block title %}
+list of mTurk HITs
+{% endblock %}
+
+{% block content %}
+{{filka}}
+{% endblock %}
+
+{% block internal_styles %}
+{{ block.super }}
+<style>
+    .red {
+        color: red
+    }
+
+    .green {
+        color: green
+    }
+</style>
+{% endblock %}
