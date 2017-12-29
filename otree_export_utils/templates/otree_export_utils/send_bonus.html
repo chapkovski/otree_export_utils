@@ -1,0 +1,19 @@
+{% extends "otree/BaseAdmin.html" %}
+{% load staticfiles  %}
+{% block title %}
+Send bonus to the worker {{worker_id}}
+{% endblock %}
+
+{% block content %}
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <a href="{% url 'assignments_list' current_hit_id %}" class="btn btn-default btn-lg active" role="button">Cancel</a>
+    <button type="submit" class="btn btn-success btn-lg active">Send message</button>
+</form>
+{% endblock %}
+
+{% block internal_styles %}
+{{ block.super }}
+
+{% endblock %}

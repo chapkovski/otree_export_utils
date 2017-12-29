@@ -1,0 +1,67 @@
+{% extends "otree/BaseAdmin.html" %}
+{% load staticfiles  %}
+{% block title %}
+list of assignments for the HIT {{current_hit_id}}
+{% endblock %}
+
+{% block content %}
+<div class="panel panel-default">
+  <div class="panel-body">
+   <div class="btn-group">
+                <button type="button" class="btn btn-success ">Expire HIT</button>
+                <button type="button" class="btn btn-danger ">Delete HIT</button>
+                <button type="button" class="btn btn-info ">Change expiration date</button>
+            </div>
+  </div>
+</div>
+
+
+
+{% if assignments %}
+<h3>Assignments</h3>
+<table class="table">
+    <thead>
+    <tr>
+    <th>
+        Worker ID
+    </th>
+    <th>Status</th>
+
+    </tr>
+
+    </thead>
+    {% for assignment in assignments %}
+    <tr>
+        <td>{{assignment.WorkerId}}</td>
+        <td>{{assignment.AssignmentStatus}}</td>
+        {% if assignment.AssignmentStatus == 'Submitted' %}
+        <td>
+            <div class="btn-group">
+                <button type="button" class="btn btn-success btn-sm">Accept</button>
+                <button type="button" class="btn btn-danger btn-sm">Reject</button>
+            </div>
+        </td>
+        {% endif %}
+        {% if assignment.AssignmentStatus == 'Rejected' %}
+        <td>
+            <button type="button" class="btn btn-success btn-sm">Re-accept</button>
+        </td>
+        {% endif %}
+        <td><a  class="btn btn-default btn-sm " role="button" href="{% url 'send_bonus' current_hit_id  assignment.AssignmentId assignment.WorkerId %}">Send bonus</a>
+        </td>
+        <td><a class="btn btn-default btn-sm " role="button"  href="{% url 'send_message' current_hit_id  assignment.AssignmentId  assignment.WorkerId %}">Send
+            message</a></td>
+
+    </tr>
+    {% endfor %}
+</table>
+
+{%endif%}
+
+<a href="{% url 'hits_list' %}" class="btn btn-default btn-lg " role="button">Back</a>
+{% endblock %}
+
+{% block internal_styles %}
+{{ block.super }}
+
+{% endblock %}

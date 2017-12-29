@@ -1,22 +1,35 @@
 {% extends "otree/BaseAdmin.html" %}
-
+{% load staticfiles  %}
 {% block title %}
 list of mTurk HITs
 {% endblock %}
 
 {% block content %}
-{{filka}}
+{% if balance %}
+<div class="alert alert-success">Your balance: <b>{{balance}}</b></div>{%endif%}
+{% if hits %}
+<table class="table">
+    {% for hit in hits %}
+    <tr>
+        <td><a href="{% url 'assignments_list' hit.HITId %} ">{{hit.HITId}}</a></td>
+        <td>
+            {{hit.Title|truncatechars:50}}
+        </td>
+        <td>{{hit.HITStatus}}</td>
+        <td>{{hit.NumberOfAssignmentsAvailable}}</td>
+
+    </tr>
+    {% endfor %}
+</table>
+{%endif%}
 {% endblock %}
 
 {% block internal_styles %}
 {{ block.super }}
-<style>
-    .red {
-        color: red
-    }
-
-    .green {
-        color: green
-    }
-</style>
+table td {
+vertical-align: middle !important;
+}
+td div.btn-group {
+vertical-align: middle !important;
+}
 {% endblock %}
