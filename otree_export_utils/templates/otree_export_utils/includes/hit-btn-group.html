@@ -1,0 +1,24 @@
+<form action="">
+<div class="btn-group" role="group">
+    <a href="{% url 'change_expiration' cur_hit.HITId %}" role='button' id="action-expire"
+       class="action btn btn-default"
+       data-toggle="tooltip" title="Expire"
+       data-placement="bottom" formaction=>
+        <span class="glyphicon glyphicon-stop"></span>
+    </a>
+
+    <button type="submit" id="action-change-date" class="action btn btn-default" data-toggle="tooltip"
+            title="Change expiration time" data-placement="bottom" formaction="{% url 'expire_hit' cur_hit.HITId %}"
+    >
+
+        <span class="glyphicon glyphicon-time"></span>
+    </button>
+    <button type="submit" id="action-delete" class="action btn
+    {% if cur_hit.HITStatus == 'Reviewable' %} btn-danger{% else %}btn-default {% endif %}
+    " data-toggle="tooltip" title="Delete HIT"
+            data-placement="bottom" formaction="{% url 'DeleteSessions' %}"
+            >
+        <span class="glyphicon glyphicon-trash"></span>
+    </button>
+</div>
+    </form>

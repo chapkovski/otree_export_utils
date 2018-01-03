@@ -5,6 +5,8 @@ list of mTurk HITs
 {% endblock %}
 
 {% block content %}
+
+
 {% if balance %}
 <div class="alert alert-success">Your balance: <b>{{balance}}</b></div>{%endif%}
 {% if hits %}
@@ -16,8 +18,8 @@ list of mTurk HITs
             {{hit.Title|truncatechars:50}}
         </td>
         <td>{{hit.HITStatus}}</td>
-        <td>{{hit.NumberOfAssignmentsAvailable}}</td>
-
+        <!--<td>{{hit.Expiration}}</td>-->
+        <td>{% include 'otree_export_utils/includes/hit-btn-group.html' with cur_hit=hit %}</td>
     </tr>
     {% endfor %}
 </table>
@@ -33,3 +35,4 @@ td div.btn-group {
 vertical-align: middle !important;
 }
 {% endblock %}
+

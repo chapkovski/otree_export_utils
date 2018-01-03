@@ -1,15 +1,15 @@
 {% extends "otree/BaseAdmin.html" %}
 {% load staticfiles  %}
 {% block title %}
-Update expiration date and time
+Approve assignment {{assignment.AssignmentId}}
 {% endblock %}
 
 {% block content %}
 <form method="post">
     {% csrf_token %}
     {{ form.as_p }}
-
-    <button type="submit" class="btn btn-success btn-lg active">Send message</button>
+    <a href="{% url 'hits_list' %}" class="btn btn-default btn-lg active" role="button">Cancel</a>
+    <button type="submit" class="btn btn-success btn-lg active">Approve assignment</button>
 </form>
 {% endblock %}
 

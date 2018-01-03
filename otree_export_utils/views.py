@@ -9,19 +9,30 @@ from django.conf import settings
 from otree.views.mturk import get_mturk_client
 from botocore.exceptions import NoCredentialsError
 import json
-from django.core.urlresolvers import reverse
+from django.core.urlresolvers import reverse, reverse_lazy
 import otree_export_utils.forms as forms
+from django.http import JsonResponse, HttpResponseRedirect
 # END OF BLOCK
 
 # BLOCK FOR TESTING JSON THINGS
 
 from django.http import JsonResponse
 from django.template.loader import render_to_string
-from .forms import TestModelForm
-from .models import TestModel
-
+from .forms import (UpdateExpirationForm)
 
 # END OF BLOCK
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def mturkclient(use_sandbox=True):
+    try:
+        yield get_mturk_client(use_sandbox=use_sandbox)
+    except NoCredentialsError:
+
+        return
+
 
 class SpecificSessionDataView(vanilla.TemplateView):
     def get(self, request, *args, **kwargs):
@@ -55,31 +66,13 @@ class HitsList(vanilla.TemplateView):
     display_name = 'mTurk HITs'
 
     def get_context_data(self, **kwargs):
-
         context = super().get_context_data(**kwargs)
-        try:
-            client = get_mturk_client(use_sandbox=True)
-        except NoCredentialsError:
-            client = None
-        if client is not None:
-            try:
+        with mturkclient() as client:
+            if client is not None:
                 balance = client.get_account_balance()['AvailableBalance']
                 hits = client.list_hits()['HITs']
-                print(hits[0]['HITId'])
-                print(len(hits))
-                # response = client.delete_hit(
-                #     HITId=hits[0]['HITId']
-                # )
-                hits = client.list_hits()['HITs']
-                print(hits[0]['HITId'])
-                print(len(hits))
-            except NoCredentialsError:
-                print('NO CLIENT')
-                balance = 'NO CLIENT'
-                hits = None
-
-            context['balance'] = balance
-            context['hits'] = hits
+                context['balance'] = balance
+                context['hits'] = hits
         return context
 
 
@@ -87,23 +80,13 @@ class AssignmentListView(vanilla.TemplateView):
     template_name = 'otree_export_utils/assignments_list.html'
 
     def get_context_data(self, **kwargs):
-
         context = super().get_context_data(**kwargs)
         current_hit_id = self.kwargs['HITId']
         print(current_hit_id)
         context['current_hit_id'] = current_hit_id
-
-        try:
-            client = get_mturk_client(use_sandbox=True)
-        except NoCredentialsError:
-            client = None
-            print('no credentials')
-        if client is not None:
-            try:
+        with mturkclient() as client:
+            if client is not None:
                 context['assignments'] = client.list_assignments_for_hit(HITId=current_hit_id)['Assignments']
-            except NoCredentialsError:
-                context['assignments'] = None
-                print('no credentials')
         return context
 
 
@@ -123,14 +106,8 @@ class SendMessageView(SendSomethingView):
     template_name = 'otree_export_utils/send_message.html'
 
     def form_valid(self, form):
-        print(form.cleaned_data)
-        try:
-            client = get_mturk_client(use_sandbox=True)
-        except NoCredentialsError:
-            client = None
-            print('no credentials')
-        if client is not None:
-            try:
+        with mturkclient() as client:
+            if client is not None:
                 sending_message = client.notify_workers(
                     Subject=form.cleaned_data['subject'],
                     MessageText=form.cleaned_data['message_text'],
@@ -138,24 +115,16 @@ class SendMessageView(SendSomethingView):
                         self.kwargs['worker_id'],
                     ]
                 )
-                print(sending_message)
-            except NoCredentialsError:
-
-                print('something is worng')
         return super().form_valid(form)
 
 
 class SendBonusView(SendSomethingView):
     template_name = 'otree_export_utils/send_bonus.html'
     form_class = forms.SendBonusForm
+
     def form_valid(self, form):
-        try:
-            client = get_mturk_client(use_sandbox=True)
-        except NoCredentialsError:
-            client = None
-            print('no credentials')
-        if client is not None:
-            try:
+        with mturkclient() as client:
+            if client is not None:
                 response = client.send_bonus(
                     WorkerId=self.kwargs['worker_id'],
                     BonusAmount=str(form.cleaned_data['bonus_amount']),
@@ -163,81 +132,96 @@ class SendBonusView(SendSomethingView):
                     Reason=form.cleaned_data['reason'],
                 )
                 print(response)
-            except NoCredentialsError:
-
-                print('something is worng')
-
         return super().form_valid(form)
 
-def testitem_create(request):
-    data = dict()
 
-    if request.method == 'POST':
-        form = TestModelForm(request.POST)
-        if form.is_valid():
-            form.save()
-            data['form_is_valid'] = True
-            books = TestModel.objects.all()
-            data['html_book_list'] = render_to_string('otree_export_utils/includes/partial_book_list.html', {
-                'filka': books
-            })
-        else:
-            data['form_is_valid'] = False
-    else:
-        form = TestModelForm()
-
-    context = {'form': form}
-    data['html_form'] = render_to_string('otree_export_utils/includes/partial_book_create.html',
-                                         context,
-                                         request=request
-                                         )
-    return JsonResponse(data)
-
-
-from django.views.generic.edit import CreateView
-
-
-class TestItemCreateJson(CreateView):
-    model = TestModel
-    form_class = TestModelForm
-
-    def get_success_url(self):
-        """
-        Overridden to ensure that JSON data gets returned, rather
-        than HttpResponseRedirect, which is bad.
-        """
-        return None
-
-    def form_valid(self, form):
-        data = dict()
-        form.save()
-        data['form_is_valid'] = True
-        books = TestModel.objects.all()
-        data['html_book_list'] = render_to_string('otree_export_utils/includes/partial_book_list.html', {
-            'filka': books
-        })
-        return self.render_to_response(self.get_context_data(success=True))
-
-    def form_invalid(self, form):
-        context = self.get_context_data(success=False)
-        context['errors'] = form.errors
-        return self.render_to_response(context)
+class DeleteHitView(vanilla.TemplateView):
+    def get(self, request, *args, **kwargs):
+        response = JsonResponse({'foo': 'bar'})
+        return response
 
     def render_to_response(self, context, **response_kwargs):
-        data = dict()
-
-        if self.request.method == 'POST':
-            form = TestModelForm(self.request.POST)
-            if form.is_valid():
-                ...
-            else:
-                data['form_is_valid'] = False
-        else:
-            form = TestModelForm()
-
-        context = {'form': form}
-        data['html_form'] = render_to_string('otree_export_utils/includes/partial_book_create.html',
-                                             context,
-                                             request=self.request
-                                             )
+        data = super().render_to_response(context, **response_kwargs)
+        print(data)
         return JsonResponse(data)
+
+
+class UpdateExpirationView(vanilla.FormView):
+    form_class = UpdateExpirationForm
+    template_name = 'otree_export_utils/update_expiration.html'
+    success_url = reverse_lazy('hits_list')
+
+    # def get_success_url(self):
+    #     return
+
+    def form_valid(self, form):
+        print('AAAA', form.cleaned_data['expire_time'])
+        with mturkclient() as client:
+            if client is not None:
+                response = client.update_expiration_for_hit(
+                    HITId=self.kwargs['HITId'],
+                    ExpireAt=form.cleaned_data['expire_time']
+                )
+                print(response)
+        return super().form_valid(form)
+
+
+from datetime import datetime, timedelta
+
+
+class ExpireHitView(vanilla.View):
+    def get(self, request, *args, **kwargs):
+        d = datetime.today() - timedelta(days=1)
+        with mturkclient() as client:
+            if client is not None:
+                response = client.update_expiration_for_hit(
+                    HITId=self.kwargs['HITId'],
+                    ExpireAt=d
+                )
+                print(response)
+        return HttpResponseRedirect(reverse('hits_list'))
+
+
+class AjaxUpdateExpirationView(vanilla.FormView):
+    form_class = UpdateExpirationForm
+
+    def get_success_url(self):
+        return None
+
+    def get(self, request, *args, **kwargs):
+        response = JsonResponse({'foo': 'bar'})
+        return response
+
+    def render_to_response(self, context, **response_kwargs):
+        data = super().render_to_response()
+        return JsonResponse(data)
+
+
+class ApproveAssignmentView(vanilla.FormView):
+    form_class = forms.ApproveAssignmentForm
+    template_name = 'otree_export_utils/approve_assignment.html'
+    success_url = reverse_lazy('hits_list')
+
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        with mturkclient() as client:
+            if client is not None:
+                response = client.approve_assignment(
+                    AssignmentId=self.kwargs['AssignmentID'],
+                    RequesterFeedback=form.cleaned_data['message_text'],
+                    OverrideRejection=True,
+                )
+                print(response)
+        return super().form_valid(form)
+
+
+class RejectAssignmentView(vanilla.FormView):
+    form_class = forms.RejectAssignmentForm
+    template_name = 'otree_export_utils/reject_assignment.html'
+    success_url = reverse_lazy('hits_list')
+
+    def form_valid(self, form):
+        print(form.cleaned_data)
+        return super().form_valid(form)
