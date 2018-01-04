@@ -12,6 +12,7 @@ import json
 from django.core.urlresolvers import reverse, reverse_lazy
 import otree_export_utils.forms as forms
 from django.http import JsonResponse, HttpResponseRedirect
+from datetime import datetime, timedelta
 # END OF BLOCK
 
 # BLOCK FOR TESTING JSON THINGS
@@ -23,6 +24,14 @@ from .forms import (UpdateExpirationForm)
 # END OF BLOCK
 
 from contextlib import contextmanager
+
+
+def check_if_deletable(h):
+    if (h['HITStatus'] == 'Reviewable' and
+                    h['NumberOfAssignmentsCompleted'] +
+                    h['NumberOfAssignmentsAvailable'] == h['MaxAssignments']):
+        h['Deletable'] = True
+    return h
 
 
 @contextmanager
@@ -71,6 +80,8 @@ class HitsList(vanilla.TemplateView):
             if client is not None:
                 balance = client.get_account_balance()['AvailableBalance']
                 hits = client.list_hits()['HITs']
+                for h in hits:
+                    h = check_if_deletable(h)
                 context['balance'] = balance
                 context['hits'] = hits
         return context
@@ -81,24 +92,41 @@ class AssignmentListView(vanilla.TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        current_hit_id = self.kwargs['HITId']
-        print(current_hit_id)
-        context['current_hit_id'] = current_hit_id
+        current_hit_id = self.kwargs.get('HITId')
         with mturkclient() as client:
             if client is not None:
-                context['assignments'] = client.list_assignments_for_hit(HITId=current_hit_id)['Assignments']
+                cur_hit = check_if_deletable(client.get_hit(HITId=current_hit_id).get('HIT'))
+                context['hit'] = cur_hit
+                assignments = client.list_assignments_for_hit(HITId=current_hit_id)['Assignments']
+                submitted_assignments = bool(
+                    {'Submitted', 'Rejected'} & set([a['AssignmentStatus'] for a in assignments]))
+                context['assignments'] = assignments
+                context['submitted_assignments'] = submitted_assignments
         return context
 
 
 class SendSomethingView(vanilla.FormView):
+    HITId = None
+    AssignmentId = None
+    WorkerId = None
+    Assignment = None
+
+    def dispatch(self, request, *args, **kwargs):
+        with mturkclient() as client:
+            if client is not None:
+                self.assignment = client.get_assignment(AssignmentId=kwargs['AssignmentID'])['Assignment']
+                self.AssignmentId = self.assignment['AssignmentId']
+                self.WorkerId = self.assignment['WorkerId']
+                self.HITId = self.assignment['HITId']
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['worker_id'] = self.kwargs['worker_id']
-        context['current_hit_id'] = self.kwargs['HITId']
+        context['assignment'] = self.assignment
         return context
 
     def get_success_url(self):
-        return reverse('assignments_list', kwargs={'HITId': self.kwargs['HITId']})
+        return reverse('assignments_list', kwargs={'HITId': self.HITId})
 
 
 class SendMessageView(SendSomethingView):
@@ -111,10 +139,9 @@ class SendMessageView(SendSomethingView):
                 sending_message = client.notify_workers(
                     Subject=form.cleaned_data['subject'],
                     MessageText=form.cleaned_data['message_text'],
-                    WorkerIds=[
-                        self.kwargs['worker_id'],
-                    ]
+                    WorkerIds=[self.WorkerId, ]
                 )
+                print(sending_message)
         return super().form_valid(form)
 
 
@@ -126,60 +153,85 @@ class SendBonusView(SendSomethingView):
         with mturkclient() as client:
             if client is not None:
                 response = client.send_bonus(
-                    WorkerId=self.kwargs['worker_id'],
+                    WorkerId=self.WorkerId,
                     BonusAmount=str(form.cleaned_data['bonus_amount']),
-                    AssignmentId=self.kwargs['AssignmentID'],
+                    AssignmentId=self.AssignmentId,
                     Reason=form.cleaned_data['reason'],
                 )
                 print(response)
         return super().form_valid(form)
 
 
-class DeleteHitView(vanilla.TemplateView):
+class DeleteHitView(vanilla.View):
     def get(self, request, *args, **kwargs):
-        response = JsonResponse({'foo': 'bar'})
-        return response
+        print(self.kwargs['HITId'])
+        with mturkclient() as client:
+            if client is not None:
+                cur_hit = check_if_deletable(client.get_hit(HITId=self.kwargs['HITId']).get('HIT'))
+                if cur_hit.get('Deletable'):
+                    response = client.delete_hit(HITId=cur_hit['HITId'])
 
-    def render_to_response(self, context, **response_kwargs):
-        data = super().render_to_response(context, **response_kwargs)
-        print(data)
-        return JsonResponse(data)
+        return HttpResponseRedirect(reverse_lazy('hits_list'))
 
 
 class UpdateExpirationView(vanilla.FormView):
+    back_to_HIT = None
     form_class = UpdateExpirationForm
     template_name = 'otree_export_utils/update_expiration.html'
-    success_url = reverse_lazy('hits_list')
+    HITId = None
+    HIT = None
 
-    # def get_success_url(self):
-    #     return
+    def get_form(self, data=None, files=None, **kwargs):
+        cls = self.get_form_class()
+        # print()
+        return cls(initial={'expire_time': self.HIT['Expiration']})
+
+    def get_success_url(self):
+        if self.back_to_HIT:
+            return reverse('assignments_list', kwargs={'HITId': self.HITId})
+        else:
+            return reverse_lazy('hits_list')
+
+    def dispatch(self, request, *args, **kwargs):
+
+        with mturkclient() as client:
+            if client is not None:
+                self.HITId = kwargs['HITId']
+                self.HIT = client.get_hit(HITId=self.HITId).get('HIT')
+        return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        print('AAAA', form.cleaned_data['expire_time'])
+
         with mturkclient() as client:
             if client is not None:
                 response = client.update_expiration_for_hit(
-                    HITId=self.kwargs['HITId'],
+                    HITId=self.HITId,
+                    ExpireAt=0  # form.cleaned_data['expire_time']
+                )
+                response = client.update_expiration_for_hit(
+                    HITId=self.HITId,
                     ExpireAt=form.cleaned_data['expire_time']
                 )
                 print(response)
         return super().form_valid(form)
 
 
-from datetime import datetime, timedelta
-
-
 class ExpireHitView(vanilla.View):
+    back_to_HIT = None
+
     def get(self, request, *args, **kwargs):
-        d = datetime.today() - timedelta(days=1)
+        # d = datetime.today() - timedelta(days=1)
         with mturkclient() as client:
             if client is not None:
                 response = client.update_expiration_for_hit(
                     HITId=self.kwargs['HITId'],
-                    ExpireAt=d
+                    ExpireAt=0,
                 )
                 print(response)
-        return HttpResponseRedirect(reverse('hits_list'))
+        if self.back_to_HIT:
+            return HttpResponseRedirect(reverse('assignments_list', kwargs={'HITId': self.kwargs['HITId']}))
+        else:
+            return HttpResponseRedirect(reverse_lazy('hits_list'))
 
 
 class AjaxUpdateExpirationView(vanilla.FormView):
@@ -223,5 +275,11 @@ class RejectAssignmentView(vanilla.FormView):
     success_url = reverse_lazy('hits_list')
 
     def form_valid(self, form):
-        print(form.cleaned_data)
+        with mturkclient() as client:
+            if client is not None:
+                response = client.reject_assignment(
+                    AssignmentId=self.kwargs['AssignmentID'],
+                    RequesterFeedback=form.cleaned_data['message_text'],
+                )
+                print(response)
         return super().form_valid(form)

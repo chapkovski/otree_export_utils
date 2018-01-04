@@ -1,16 +1,25 @@
 {% extends "otree/BaseAdmin.html" %}
 {% load staticfiles  %}
 {% block title %}
-list of assignments for the HIT {{current_hit_id}}
+List of assignments for the HIT {{hit.HITId}}
 {% endblock %}
 
 {% block content %}
+
 <div class="panel panel-default">
     <div class="panel-body">
+        <h4>Title: {{hit.Title}}</h4>
+        <h4>Status: {{hit.HITStatus}}</h4>
+        <h4>Expiration date: {{hit.Expiration}}</h4>
         <div class="btn-group">
-            <button type="button" class="btn btn-success ">Expire HIT</button>
-            <button type="button" class="btn btn-danger" id="hit-delete">Delete HIT</button>
-            <button type="button" class="btn btn-info ">Change expiration date</button>
+            {% if hit.NumberOfAssignmentsAvailable > 0 %}
+                <a href="{% url 'expire_hit_back' hit.HITId %}" role="button" class="btn btn-success ">Expire HIT</a>
+                <a href="{% url 'change_expiration_back' hit.HITId  %}" role="button" class="btn btn-info ">Change expiration date</a>
+            {% endif %}
+            {% if hit.Deletable %}
+                <a href="{% url 'delete_hit' hit.HITId  %}" role="button" class="btn btn-danger" id="hit-delete">Delete HIT</a>
+            {% endif %}
+
         </div>
     </div>
 </div>
@@ -18,20 +27,19 @@ list of assignments for the HIT {{current_hit_id}}
 
 {% if assignments %}
 <h3>Assignments</h3>
-<table class="table">
+<table class="table table-hover table-responsive table-striped">
     <thead>
     <tr>
         <th>Assignment ID</th>
         <th>Status</th>
+        {% if submitted_assignments %}<th></th>{% endif %}
+        <th>Worker ID</th>
         <th></th>
-        <th>
-            Worker ID
-        </th>
-
-
     </tr>
 
     </thead>
+    <tbody>
+
     {% for assignment in assignments %}
     <tr>
         <td>{{assignment.AssignmentId|truncatechars:10}}</td>
@@ -51,23 +59,28 @@ list of assignments for the HIT {{current_hit_id}}
         {% endif %}
         {% if assignment.AssignmentStatus == 'Rejected' %}
         <td>
-            <button type="button" class="btn btn-success btn-sm">Re-accept</button>
+            <a role="button" href="{% url 'approve_assignment' assignment.AssignmentId %}"
+               class="btn btn-success btn-sm">Re-accept</a>
         </td>
         {% endif %}
         <td>{{assignment.WorkerId}}</td>
         {% if assignment.AssignmentStatus == 'Approved' %}
         <td><a class="btn btn-default btn-sm  " role="button"
-               href="{% url 'send_bonus' current_hit_id  assignment.AssignmentId assignment.WorkerId %}">Send bonus</a>
+               href="{% url 'send_bonus'  assignment.AssignmentId %}">Send bonus</a>
         </td>
         {% endif %}
 
         <td><a class="btn btn-default btn-sm " role="button"
-               href="{% url 'send_message' current_hit_id  assignment.AssignmentId  assignment.WorkerId %}">Send
+               href="{% url 'send_message' assignment.AssignmentId %}">Send
             message</a></td>
 
     </tr>
     {% endfor %}
+    </tbody>
 </table>
+{% else %}
+
+    <div class="alert alert-info">This HIT does not contain completed assignments.</b></div>
 
 {%endif%}
 
@@ -81,7 +94,7 @@ list of assignments for the HIT {{current_hit_id}}
 {% block internal_scripts %}
 {{ block.super }}
 <script>
-    var delete_hit_url = "{% url 'delete_hit' current_hit_id  %}";
+
 </script>
 <script src="{% static 'otree_export_utils/js/ajax_delete_hit.js' %}"></script>
 <script src="{% static 'otree_export_utils/js/ajax_change_expiration_hit.js' %}"></script>

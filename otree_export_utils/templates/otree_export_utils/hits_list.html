@@ -1,7 +1,7 @@
 {% extends "otree/BaseAdmin.html" %}
 {% load staticfiles  %}
 {% block title %}
-list of mTurk HITs
+List of mTurk HITs
 {% endblock %}
 
 {% block content %}
@@ -10,18 +10,29 @@ list of mTurk HITs
 {% if balance %}
 <div class="alert alert-success">Your balance: <b>{{balance}}</b></div>{%endif%}
 {% if hits %}
-<table class="table">
+<table class="table table-hover table-responsive table-striped">
+    <thead>
+    <tr>
+        <th>HIT Id</th>
+         <th>Title</th>
+         <th>Status</th>
+        <th>Expire at</th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody>
     {% for hit in hits %}
     <tr>
-        <td><a href="{% url 'assignments_list' hit.HITId %} ">{{hit.HITId}}</a></td>
+        <td><a href="{% url 'assignments_list' hit.HITId %} ">{{hit.HITId|truncatechars:10}}</a></td>
         <td>
             {{hit.Title|truncatechars:50}}
         </td>
         <td>{{hit.HITStatus}}</td>
-        <!--<td>{{hit.Expiration}}</td>-->
+        <td>{{hit.Expiration}}</td>
         <td>{% include 'otree_export_utils/includes/hit-btn-group.html' with cur_hit=hit %}</td>
     </tr>
     {% endfor %}
+    </tbody>
 </table>
 {%endif%}
 {% endblock %}

@@ -6,11 +6,17 @@ Update expiration date
 
 {% block content %}
 <form method="post">
-     {{ form.media }}
+    {{ form.media }}
     {% csrf_token %}
     {{ form.as_p }}
-    <a href="{% url 'assignments_list' current_hit_id %}" class="btn btn-default btn-lg active" role="button">Cancel</a>
-    <button type="submit" class="btn btn-success btn-lg active">Send message</button>
+    <a href="
+    {% if view.back_to_HIT %}
+    {% url 'assignments_list' view.HITId %}
+    {% else %}
+    {% url 'hits_list' %}
+    {% endif %}
+" class="btn btn-default btn-lg active" role="button">Cancel</a>
+    <button type="submit" class="btn btn-success btn-lg active">Update</button>
 </form>
 {% endblock %}
 
