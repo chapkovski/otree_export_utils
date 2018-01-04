@@ -7,7 +7,7 @@ from django.shortcuts import render
 # BLOCK FOR MTURK HITS
 from django.conf import settings
 from otree.views.mturk import get_mturk_client
-from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import NoCredentialsError, EndpointConnectionError
 import json
 from django.core.urlresolvers import reverse, reverse_lazy
 import otree_export_utils.forms as forms
@@ -39,8 +39,11 @@ def mturkclient(use_sandbox=True):
     try:
         yield get_mturk_client(use_sandbox=use_sandbox)
     except NoCredentialsError:
-
-        return
+        print('no credentials')
+        return 'No credentials'
+    except EndpointConnectionError:
+        print('no connection')
+        return 'No connection to Amazon web-site'
 
 
 class SpecificSessionDataView(vanilla.TemplateView):
@@ -77,6 +80,7 @@ class HitsList(vanilla.TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         with mturkclient() as client:
+            print('CCCCC',client.__dict__)
             if client is not None:
                 balance = client.get_account_balance()['AvailableBalance']
                 hits = client.list_hits()['HITs']
@@ -184,7 +188,7 @@ class UpdateExpirationView(vanilla.FormView):
     def get_form(self, data=None, files=None, **kwargs):
         cls = self.get_form_class()
         # print()
-        return cls(initial={'expire_time': self.HIT['Expiration']})
+        return cls(data=data, files=files, initial={'expire_time': self.HIT['Expiration']})
 
     def get_success_url(self):
         if self.back_to_HIT:
@@ -201,7 +205,7 @@ class UpdateExpirationView(vanilla.FormView):
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-
+        print('form is valid!')
         with mturkclient() as client:
             if client is not None:
                 response = client.update_expiration_for_hit(
@@ -212,7 +216,6 @@ class UpdateExpirationView(vanilla.FormView):
                     HITId=self.HITId,
                     ExpireAt=form.cleaned_data['expire_time']
                 )
-                print(response)
         return super().form_valid(form)
 
 
@@ -234,19 +237,7 @@ class ExpireHitView(vanilla.View):
             return HttpResponseRedirect(reverse_lazy('hits_list'))
 
 
-class AjaxUpdateExpirationView(vanilla.FormView):
-    form_class = UpdateExpirationForm
 
-    def get_success_url(self):
-        return None
-
-    def get(self, request, *args, **kwargs):
-        response = JsonResponse({'foo': 'bar'})
-        return response
-
-    def render_to_response(self, context, **response_kwargs):
-        data = super().render_to_response()
-        return JsonResponse(data)
 
 
 class ApproveAssignmentView(vanilla.FormView):
