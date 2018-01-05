@@ -5,8 +5,21 @@ List of mTurk HITs
 {% endblock %}
 
 {% block content %}
+<link href="{% static "otree_export_utils/css/toggle.css" %}" rel="stylesheet">
 
 
+<h4>Sandbox:
+    <label class="switch">
+
+      <input type="checkbox" class="switch-input" value="1" checked disabled>
+      <span class="switch-label" data-on="On" data-off="Off"></span>
+      <span class="switch-handle"></span>
+    </label>
+</h4>
+
+{% if mturk_errors %}
+<div class="alert alert-danger">{{mturk_errors}}</div>
+{%endif%}
 {% if balance %}
 <div class="alert alert-success">Your balance: <b>{{balance}}</b></div>{%endif%}
 {% if hits %}
@@ -14,8 +27,8 @@ List of mTurk HITs
     <thead>
     <tr>
         <th>HIT Id</th>
-         <th>Title</th>
-         <th>Status</th>
+        <th>Title</th>
+        <th>Status</th>
         <th>Expire at</th>
         <th></th>
     </tr>
@@ -35,9 +48,11 @@ List of mTurk HITs
     </tbody>
 </table>
 {%endif%}
+
 {% endblock %}
 
 {% block internal_styles %}
+
 {{ block.super }}
 table td {
 vertical-align: middle !important;

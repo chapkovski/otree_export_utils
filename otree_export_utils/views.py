@@ -34,16 +34,30 @@ def check_if_deletable(h):
     return h
 
 
-@contextmanager
-def mturkclient(use_sandbox=True):
-    try:
-        yield get_mturk_client(use_sandbox=use_sandbox)
-    except NoCredentialsError:
-        print('no credentials')
-        return 'No credentials'
-    except EndpointConnectionError:
-        print('no connection')
-        return 'No connection to Amazon web-site'
+NO_CRED_ERR_CODE = 0
+NO_CONN_ERR_CODE = 1
+
+
+class MturkClient(object):
+    client = None
+    errors = None
+
+    def get_errors(self):
+        if self.errors == NO_CONN_ERR_CODE:
+            return 'Sorry, there is no connection to Amazon mTurk web-site. Check your internet connection.'
+        if self.errors == NO_CRED_ERR_CODE:
+            return 'Sorry, I cannot find your Amazon credentials. Check your environment variables.'
+
+    def __init__(self, use_sandbox=True):
+        try:
+            self.client = get_mturk_client(use_sandbox=use_sandbox)
+            self.client.get_account_balance()
+        except NoCredentialsError:
+            self.client = None
+            self.errors = NO_CRED_ERR_CODE
+        except EndpointConnectionError:
+            self.client = None
+            self.errors = NO_CONN_ERR_CODE
 
 
 class SpecificSessionDataView(vanilla.TemplateView):
@@ -62,11 +76,6 @@ class AllSessionsList(vanilla.TemplateView):
     display_name = 'Exporting data from individual sessions'
 
     def get(self, request, *args, **kwargs):
-        from .models import TestModel
-        newtest = TestModel()
-        newtest.title = 'asdf'
-        newtest.myf = 'kuku'
-        newtest.save()
         all_sessions = Session.objects.all()
         return render(request, self.template_name, {'sessions': all_sessions})
 
@@ -79,15 +88,19 @@ class HitsList(vanilla.TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        with mturkclient() as client:
-            print('CCCCC',client.__dict__)
-            if client is not None:
-                balance = client.get_account_balance()['AvailableBalance']
-                hits = client.list_hits()['HITs']
-                for h in hits:
-                    h = check_if_deletable(h)
-                context['balance'] = balance
-                context['hits'] = hits
+        mturk = MturkClient()
+        client = mturk.client
+
+        if client is not None:
+            balance = client.get_account_balance()['AvailableBalance']
+            hits = client.list_hits()['HITs']
+            for h in hits:
+                h = check_if_deletable(h)
+            context['balance'] = balance
+            context['hits'] = hits
+        else:
+            context['mturk_errors'] = mturk.get_errors()
+
         return context
 
 
@@ -97,15 +110,18 @@ class AssignmentListView(vanilla.TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         current_hit_id = self.kwargs.get('HITId')
-        with mturkclient() as client:
-            if client is not None:
-                cur_hit = check_if_deletable(client.get_hit(HITId=current_hit_id).get('HIT'))
-                context['hit'] = cur_hit
-                assignments = client.list_assignments_for_hit(HITId=current_hit_id)['Assignments']
-                submitted_assignments = bool(
-                    {'Submitted', 'Rejected'} & set([a['AssignmentStatus'] for a in assignments]))
-                context['assignments'] = assignments
-                context['submitted_assignments'] = submitted_assignments
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            cur_hit = check_if_deletable(client.get_hit(HITId=current_hit_id).get('HIT'))
+            context['hit'] = cur_hit
+            assignments = client.list_assignments_for_hit(HITId=current_hit_id)['Assignments']
+            submitted_assignments = bool(
+                {'Submitted', 'Rejected'} & set([a['AssignmentStatus'] for a in assignments]))
+            context['assignments'] = assignments
+            context['submitted_assignments'] = submitted_assignments
+        else:
+            context['mturk_errors'] = mturk.get_errors()
         return context
 
 
@@ -116,12 +132,15 @@ class SendSomethingView(vanilla.FormView):
     Assignment = None
 
     def dispatch(self, request, *args, **kwargs):
-        with mturkclient() as client:
-            if client is not None:
-                self.assignment = client.get_assignment(AssignmentId=kwargs['AssignmentID'])['Assignment']
-                self.AssignmentId = self.assignment['AssignmentId']
-                self.WorkerId = self.assignment['WorkerId']
-                self.HITId = self.assignment['HITId']
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            self.assignment = client.get_assignment(AssignmentId=kwargs['AssignmentID'])['Assignment']
+            self.AssignmentId = self.assignment['AssignmentId']
+            self.WorkerId = self.assignment['WorkerId']
+            self.HITId = self.assignment['HITId']
+        else:
+            self.context['mturk_errors'] = mturk.get_errors()
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -138,14 +157,14 @@ class SendMessageView(SendSomethingView):
     template_name = 'otree_export_utils/send_message.html'
 
     def form_valid(self, form):
-        with mturkclient() as client:
-            if client is not None:
-                sending_message = client.notify_workers(
-                    Subject=form.cleaned_data['subject'],
-                    MessageText=form.cleaned_data['message_text'],
-                    WorkerIds=[self.WorkerId, ]
-                )
-                print(sending_message)
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            sending_message = client.notify_workers(
+                Subject=form.cleaned_data['subject'],
+                MessageText=form.cleaned_data['message_text'],
+                WorkerIds=[self.WorkerId, ]
+            )
         return super().form_valid(form)
 
 
@@ -154,26 +173,35 @@ class SendBonusView(SendSomethingView):
     form_class = forms.SendBonusForm
 
     def form_valid(self, form):
-        with mturkclient() as client:
-            if client is not None:
-                response = client.send_bonus(
-                    WorkerId=self.WorkerId,
-                    BonusAmount=str(form.cleaned_data['bonus_amount']),
-                    AssignmentId=self.AssignmentId,
-                    Reason=form.cleaned_data['reason'],
-                )
-                print(response)
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            response = client.list_bonus_payments(
+
+                AssignmentId=self.AssignmentId,
+
+            )
+            bs = response['BonusPayments']
+            tot_bon=sum([float(i['BonusAmount']) for i in bs])
+            print('TOT SUM PAID SO FAR:', tot_bon)
+
+            response = client.send_bonus(
+                WorkerId=self.WorkerId,
+                BonusAmount=str(form.cleaned_data['bonus_amount']),
+                AssignmentId=self.AssignmentId,
+                Reason=form.cleaned_data['reason'],
+            )
         return super().form_valid(form)
 
 
 class DeleteHitView(vanilla.View):
     def get(self, request, *args, **kwargs):
-        print(self.kwargs['HITId'])
-        with mturkclient() as client:
-            if client is not None:
-                cur_hit = check_if_deletable(client.get_hit(HITId=self.kwargs['HITId']).get('HIT'))
-                if cur_hit.get('Deletable'):
-                    response = client.delete_hit(HITId=cur_hit['HITId'])
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            cur_hit = check_if_deletable(client.get_hit(HITId=self.kwargs['HITId']).get('HIT'))
+            if cur_hit.get('Deletable'):
+                response = client.delete_hit(HITId=cur_hit['HITId'])
 
         return HttpResponseRedirect(reverse_lazy('hits_list'))
 
@@ -198,24 +226,27 @@ class UpdateExpirationView(vanilla.FormView):
 
     def dispatch(self, request, *args, **kwargs):
 
-        with mturkclient() as client:
-            if client is not None:
-                self.HITId = kwargs['HITId']
-                self.HIT = client.get_hit(HITId=self.HITId).get('HIT')
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            self.HITId = kwargs['HITId']
+            self.HIT = client.get_hit(HITId=self.HITId).get('HIT')
+        else:
+            self.context['mturk_errors'] = mturk.get_errors()
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        print('form is valid!')
-        with mturkclient() as client:
-            if client is not None:
-                response = client.update_expiration_for_hit(
-                    HITId=self.HITId,
-                    ExpireAt=0  # form.cleaned_data['expire_time']
-                )
-                response = client.update_expiration_for_hit(
-                    HITId=self.HITId,
-                    ExpireAt=form.cleaned_data['expire_time']
-                )
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            response = client.update_expiration_for_hit(
+                HITId=self.HITId,
+                ExpireAt=0  # form.cleaned_data['expire_time']
+            )
+            response = client.update_expiration_for_hit(
+                HITId=self.HITId,
+                ExpireAt=form.cleaned_data['expire_time']
+            )
         return super().form_valid(form)
 
 
@@ -223,21 +254,17 @@ class ExpireHitView(vanilla.View):
     back_to_HIT = None
 
     def get(self, request, *args, **kwargs):
-        # d = datetime.today() - timedelta(days=1)
-        with mturkclient() as client:
-            if client is not None:
-                response = client.update_expiration_for_hit(
-                    HITId=self.kwargs['HITId'],
-                    ExpireAt=0,
-                )
-                print(response)
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            response = client.update_expiration_for_hit(
+                HITId=self.kwargs['HITId'],
+                ExpireAt=0,
+            )
         if self.back_to_HIT:
             return HttpResponseRedirect(reverse('assignments_list', kwargs={'HITId': self.kwargs['HITId']}))
         else:
             return HttpResponseRedirect(reverse_lazy('hits_list'))
-
-
-
 
 
 class ApproveAssignmentView(vanilla.FormView):
@@ -249,14 +276,14 @@ class ApproveAssignmentView(vanilla.FormView):
         return super().get(request, *args, **kwargs)
 
     def form_valid(self, form):
-        with mturkclient() as client:
-            if client is not None:
-                response = client.approve_assignment(
-                    AssignmentId=self.kwargs['AssignmentID'],
-                    RequesterFeedback=form.cleaned_data['message_text'],
-                    OverrideRejection=True,
-                )
-                print(response)
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            response = client.approve_assignment(
+                AssignmentId=self.kwargs['AssignmentID'],
+                RequesterFeedback=form.cleaned_data['message_text'],
+                OverrideRejection=True,
+            )
         return super().form_valid(form)
 
 
@@ -266,11 +293,11 @@ class RejectAssignmentView(vanilla.FormView):
     success_url = reverse_lazy('hits_list')
 
     def form_valid(self, form):
-        with mturkclient() as client:
-            if client is not None:
-                response = client.reject_assignment(
-                    AssignmentId=self.kwargs['AssignmentID'],
-                    RequesterFeedback=form.cleaned_data['message_text'],
-                )
-                print(response)
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
+            response = client.reject_assignment(
+                AssignmentId=self.kwargs['AssignmentID'],
+                RequesterFeedback=form.cleaned_data['message_text'],
+            )
         return super().form_valid(form)
