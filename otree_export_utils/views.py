@@ -12,7 +12,8 @@ import json
 from django.core.urlresolvers import reverse, reverse_lazy
 import otree_export_utils.forms as forms
 from django.http import JsonResponse, HttpResponseRedirect
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from dateutil import tz
 # END OF BLOCK
 
 # BLOCK FOR TESTING JSON THINGS
@@ -172,19 +173,29 @@ class SendBonusView(SendSomethingView):
     template_name = 'otree_export_utils/send_bonus.html'
     form_class = forms.SendBonusForm
 
-    def form_valid(self, form):
+    def get_form(self, data=None, files=None, **kwargs):
+        max_bon = 100
         mturk = MturkClient()
         client = mturk.client
         if client is not None:
             response = client.list_bonus_payments(
-
-                AssignmentId=self.AssignmentId,
-
+                HITId=self.HITId,
+                MaxResults=100,
             )
             bs = response['BonusPayments']
-            tot_bon=sum([float(i['BonusAmount']) for i in bs])
-            print('TOT SUM PAID SO FAR:', tot_bon)
+            today = datetime.utcnow().date()
+            start = datetime(today.year, today.month, today.day, tzinfo=tz.tzutc())
+            recent_bs = [float(i['BonusAmount']) for i in bs if i['GrantTime'] > start]
+            tot_bon = sum([i for i in recent_bs])
+            max_bon = max(0, 100 - tot_bon)
 
+        cls = self.get_form_class()
+        return cls(data=data, files=files, max_bonus=max_bon)
+
+    def form_valid(self, form):
+        mturk = MturkClient()
+        client = mturk.client
+        if client is not None:
             response = client.send_bonus(
                 WorkerId=self.WorkerId,
                 BonusAmount=str(form.cleaned_data['bonus_amount']),

@@ -1,2 +1,7 @@
 include README.rst
 graft otree_export_utils/templates/*
+
+# added by check_manifest.py
+include LICENSE
+recursive-include otree_export_utils *.css
+recursive-include otree_export_utils *.js

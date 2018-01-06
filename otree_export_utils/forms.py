@@ -4,8 +4,10 @@ import floppyforms as forms
 
 
 class SendBonusForm(forms.Form):
-    bonus_amount = forms.FloatField(min_value=0)
-    reason = forms.CharField(widget=forms.Textarea)
+    def __init__(self, max_bonus, *args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.fields['bonus_amount']=forms.FloatField(min_value=0, max_value=max_bonus)
+        self.fields['reason'] = forms.CharField(widget=forms.Textarea)
 
 
 class SendMessageForm(forms.Form):

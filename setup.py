@@ -44,6 +44,7 @@ setup(
     install_requires=[
         'Django==1.8.8',
         'otree-core>=1.4.6',
+        'boto3==1.5.8',
         'django-datetime-widget>=0.9.3',
     ]
 )
