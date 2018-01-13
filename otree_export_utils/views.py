@@ -49,7 +49,7 @@ class MturkClient(object):
         if self.errors == NO_CRED_ERR_CODE:
             return 'Sorry, I cannot find your Amazon credentials. Check your environment variables.'
 
-    def __init__(self, use_sandbox=True):
+    def __init__(self, use_sandbox=False):
         try:
             self.client = get_mturk_client(use_sandbox=use_sandbox)
             self.client.get_account_balance()
