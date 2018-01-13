@@ -250,10 +250,18 @@ class UpdateExpirationView(vanilla.FormView):
         mturk = MturkClient()
         client = mturk.client
         if client is not None:
-            response = client.update_expiration_for_hit(
-                HITId=self.HITId,
-                ExpireAt=0  # form.cleaned_data['expire_time']
-            )
+            try:
+                response = client.update_expiration_for_hit(
+                    HITId=self.HITId,
+                    ExpireAt=0
+                )
+            #     the following exception is to deal with the error appearing on windows machines when
+            # the date is set on 0
+            except OSError:
+                response = client.update_expiration_for_hit(
+                    HITId=self.HITId,
+                    ExpireAt=datetime.today() - timedelta(days=1)
+                )
             response = client.update_expiration_for_hit(
                 HITId=self.HITId,
                 ExpireAt=form.cleaned_data['expire_time']
@@ -263,15 +271,24 @@ class UpdateExpirationView(vanilla.FormView):
 
 class ExpireHitView(vanilla.View):
     back_to_HIT = None
-
+    HITId=None
     def get(self, request, *args, **kwargs):
         mturk = MturkClient()
         client = mturk.client
+        self.HITId=self.kwargs['HITId']
         if client is not None:
-            response = client.update_expiration_for_hit(
-                HITId=self.kwargs['HITId'],
-                ExpireAt=0,
-            )
+            try:
+                response = client.update_expiration_for_hit(
+                    HITId=self.HITId,
+                    ExpireAt=0
+                )
+            # the following exception is to deal with the error appearing on windows machines when
+            # the date is set on 0
+            except OSError:
+                response = client.update_expiration_for_hit(
+                    HITId=self.HITId,
+                    ExpireAt=datetime.today() - timedelta(days=1)
+                )
         if self.back_to_HIT:
             return HttpResponseRedirect(reverse('assignments_list', kwargs={'HITId': self.kwargs['HITId']}))
         else:
