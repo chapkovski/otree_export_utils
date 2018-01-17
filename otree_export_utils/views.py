@@ -116,7 +116,9 @@ class AssignmentListView(vanilla.TemplateView):
         if client is not None:
             cur_hit = check_if_deletable(client.get_hit(HITId=current_hit_id).get('HIT'))
             context['hit'] = cur_hit
-            assignments = client.list_assignments_for_hit(HITId=current_hit_id)['Assignments']
+            assignments = client.list_assignments_for_hit(HITId=current_hit_id,
+                                                          MaxResults=1000,
+                                                          )['Assignments']
             submitted_assignments = bool(
                 {'Submitted', 'Rejected'} & set([a['AssignmentStatus'] for a in assignments]))
             context['assignments'] = assignments
@@ -255,7 +257,7 @@ class UpdateExpirationView(vanilla.FormView):
                     HITId=self.HITId,
                     ExpireAt=0
                 )
-            #     the following exception is to deal with the error appearing on windows machines when
+            # the following exception is to deal with the error appearing on windows machines when
             # the date is set on 0
             except OSError:
                 response = client.update_expiration_for_hit(
@@ -271,11 +273,12 @@ class UpdateExpirationView(vanilla.FormView):
 
 class ExpireHitView(vanilla.View):
     back_to_HIT = None
-    HITId=None
+    HITId = None
+
     def get(self, request, *args, **kwargs):
         mturk = MturkClient()
         client = mturk.client
-        self.HITId=self.kwargs['HITId']
+        self.HITId = self.kwargs['HITId']
         if client is not None:
             try:
                 response = client.update_expiration_for_hit(
